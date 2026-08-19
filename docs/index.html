@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>asciitime</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #ffffff;
+    --fg: #1a1a1a;
+    --muted: #666666;
+    --border: #d0d0d0;
+    --panel: #f7f7f7;
+    --accent: #2563eb;
+    --error: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --fg: #e6e6e6;
+      --muted: #9a9a9a;
+      --border: #333941;
+      --panel: #1c1f24;
+      --accent: #5b8def;
+      --error: #ff6b6b;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 1.5rem;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  h1 {
+    font-size: 1.25rem;
+    margin: 0 0 0.25rem;
+  }
+  p.sub {
+    color: var(--muted);
+    margin: 0 0 1.25rem;
+    font-size: 0.9rem;
+  }
+  .layout {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+  }
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: var(--panel);
+    padding: 0.75rem;
+  }
+  .panel h2 {
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+    margin: 0 0 0.5rem;
+  }
+  textarea, pre {
+    width: 100%;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 0.85rem;
+    line-height: 1.4;
+  }
+  textarea {
+    height: 420px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--fg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem;
+  }
+  pre {
+    margin: 0;
+    height: 420px;
+    overflow: auto;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.6rem;
+    white-space: pre;
+  }
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.6rem 0;
+    flex-wrap: wrap;
+  }
+  label {
+    font-size: 0.85rem;
+    color: var(--muted);
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  input[type="number"] {
+    width: 5rem;
+    font-family: inherit;
+    font-size: 0.85rem;
+    padding: 0.3rem 0.4rem;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg);
+    color: var(--fg);
+  }
+  button {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--bg);
+    color: var(--fg);
+    cursor: pointer;
+  }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border-color: var(--accent);
+  }
+  button:hover { filter: brightness(1.05); }
+  .error {
+    color: var(--error);
+    font-size: 0.85rem;
+    margin: 0.4rem 0 0;
+    white-space: pre-wrap;
+  }
+  .status {
+    color: var(--muted);
+    font-size: 0.8rem;
+  }
+</style>
+</head>
+<body>
+  <h1>asciitime</h1>
+  <p class="sub">Paste a timeline YAML definition and get back an ASCII diagram — rendered entirely in your browser via WebAssembly.</p>
+
+  <div class="controls">
+    <button id="load-absolute">Load absolute example</button>
+    <button id="load-symbolic">Load symbolic example</button>
+    <label>width <input type="number" id="width" placeholder="auto"></label>
+    <button id="render-btn" class="primary">Render</button>
+    <span id="status" class="status">loading…</span>
+  </div>
+
+  <div class="layout">
+    <div class="panel">
+      <h2>YAML</h2>
+      <textarea id="yaml" spellcheck="false"></textarea>
+    </div>
+    <div class="panel">
+      <h2>Output</h2>
+      <pre id="output"></pre>
+      <div id="error" class="error" hidden></div>
+    </div>
+  </div>
+
+<script src="wasm_exec.js"></script>
+<script>
+const ABSOLUTE_EXAMPLE = `title: Contracts
+axis: absolute
+
+windows:
+  - id: A
+    label: Contract A
+    start: 2026-01-05T00:00:00Z
+    end: 2026-03-01T00:00:00Z
+  - id: B
+    label: Contract B
+    start: 2026-02-10T00:00:00Z
+    end: 2026-04-01T00:00:00Z
+
+events:
+  - id: E1
+    label: Signed
+    time: 2026-02-01T00:00:00Z
+  - id: E2
+    label: Amendment
+    time: 2026-02-10T00:00:00Z
+    recorded_at: 2026-03-05T00:00:00Z
+`;
+
+const SYMBOLIC_EXAMPLE = `title: Protocol Trace
+axis: symbolic
+
+options:
+  stack_clashing_events: true
+
+windows:
+  - id: A
+    label: Session A
+    start: 0
+    end: 4
+  - id: B
+    label: Session B
+    start: 2
+    end: 6
+
+events:
+  - id: E1
+    label: Handshake
+    time: 1
+  - id: E2
+    label: Ack
+    time: 2
+  - id: E3
+    label: Retry
+    time: 2
+`;
+
+const yamlEl = document.getElementById('yaml');
+const outputEl = document.getElementById('output');
+const errorEl = document.getElementById('error');
+const statusEl = document.getElementById('status');
+const widthEl = document.getElementById('width');
+
+function doRender() {
+  if (typeof window.asciitimeRender !== 'function') return;
+  const widthVal = widthEl.value.trim();
+  const width = widthVal ? parseInt(widthVal, 10) : 0;
+  const res = window.asciitimeRender(yamlEl.value, width);
+  if (res.error) {
+    errorEl.textContent = res.error;
+    errorEl.hidden = false;
+    outputEl.textContent = '';
+  } else {
+    errorEl.hidden = true;
+    outputEl.textContent = res.output;
+  }
+}
+
+let debounceTimer;
+yamlEl.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(doRender, 250);
+});
+widthEl.addEventListener('input', () => {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(doRender, 250);
+});
+document.getElementById('render-btn').addEventListener('click', doRender);
+document.getElementById('load-absolute').addEventListener('click', () => {
+  yamlEl.value = ABSOLUTE_EXAMPLE;
+  doRender();
+});
+document.getElementById('load-symbolic').addEventListener('click', () => {
+  yamlEl.value = SYMBOLIC_EXAMPLE;
+  doRender();
+});
+
+async function loadWasm() {
+  const go = new Go();
+  let result;
+  try {
+    result = await WebAssembly.instantiateStreaming(fetch('main.wasm'), go.importObject);
+  } catch (e) {
+    // Falls back to non-streaming instantiation for servers that don't
+    // send application/wasm as the Content-Type (some local dev
+    // servers, mainly — GitHub Pages sets it correctly).
+    const resp = await fetch('main.wasm');
+    const bytes = await resp.arrayBuffer();
+    result = await WebAssembly.instantiate(bytes, go.importObject);
+  }
+  go.run(result.instance);
+  statusEl.textContent = 'ready';
+  yamlEl.value = ABSOLUTE_EXAMPLE;
+  doRender();
+}
+
+loadWasm().catch((err) => {
+  statusEl.textContent = 'failed to load';
+  errorEl.textContent = 'Failed to load the WebAssembly module: ' + err;
+  errorEl.hidden = false;
+});
+</script>
+</body>
+</html>

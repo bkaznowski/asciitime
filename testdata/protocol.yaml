@@ -1,0 +1,26 @@
+title: Protocol Trace
+axis: symbolic
+
+options:
+  stack_clashing_events: true
+
+windows:
+  - id: A
+    label: Session A
+    start: 0
+    end: 4
+  - id: B
+    label: Session B
+    start: 2
+    end: 6
+
+events:
+  - id: E1
+    label: Handshake
+    time: 1
+  - id: E2
+    label: Ack
+    time: 2
+  - id: E3
+    label: Retry
+    time: 2

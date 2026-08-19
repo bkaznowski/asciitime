@@ -1,0 +1,21 @@
+title: Contracts
+axis: absolute
+
+windows:
+  - id: A
+    label: Contract A
+    start: 2026-01-05T00:00:00Z
+    end: 2026-03-01T00:00:00Z
+  - id: B
+    label: Contract B
+    start: 2026-02-10T00:00:00Z
+    end: 2026-04-01T00:00:00Z
+
+events:
+  - id: E1
+    label: Signed
+    time: 2026-02-01T00:00:00Z
+  - id: E2
+    label: Amendment
+    time: 2026-02-10T00:00:00Z
+    recorded_at: 2026-03-05T00:00:00Z

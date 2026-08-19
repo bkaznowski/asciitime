@@ -1,0 +1,23 @@
+title: Account Activity
+axis: symbolic
+
+events:
+  - id: E1
+    label: Account Opened
+    time: 1
+    group: account
+  - id: E2
+    label: Suspicious Login
+    time: 5
+    group: account
+  - id: P1
+    label: Payment Sent
+    time: 2
+    group: payment
+  - id: P2
+    label: Refund Issued
+    time: 5
+    group: payment
+  - id: N1
+    label: Note
+    time: 3
