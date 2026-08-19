@@ -1,4 +1,4 @@
-module github.com/kaznowski/asciitime
+module github.com/bkaznowski/asciitime
 
 go 1.26.4
 

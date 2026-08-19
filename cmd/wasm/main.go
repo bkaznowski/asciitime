@@ -8,7 +8,7 @@ package main
 import (
 	"syscall/js"
 
-	"github.com/kaznowski/asciitime/internal/render"
+	"github.com/bkaznowski/asciitime/internal/render"
 )
 
 func renderYAML(this js.Value, args []js.Value) interface{} {

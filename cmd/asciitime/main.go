@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kaznowski/asciitime/internal/render"
+	"github.com/bkaznowski/asciitime/internal/render"
 )
 
 func main() {
