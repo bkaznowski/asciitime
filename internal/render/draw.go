@@ -294,7 +294,7 @@ func legendLines(tl Timeline) []string {
 	for _, e := range tl.Events {
 		when := formatPos(tl.Axis, e.Time)
 		if e.Backdated {
-			when = fmt.Sprintf("occurred %s, logged %s", formatPos(tl.Axis, e.Time), formatPos(tl.Axis, e.RecordedAt))
+			when = fmt.Sprintf("occurred %s, logged %s", formatPos(tl.Axis, e.Time), formatPos(tl.Axis, e.LoggedAt))
 		}
 		lines = append(lines, fmt.Sprintf("%-*s  %-*s  %s", idWidth, e.ID, labelWidth, e.Label, when))
 	}

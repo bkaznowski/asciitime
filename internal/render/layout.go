@@ -29,7 +29,7 @@ func newScale(tl Timeline, width int) scale {
 	for _, e := range tl.Events {
 		consider(e.Time.float())
 		if e.Backdated {
-			consider(e.RecordedAt.float())
+			consider(e.LoggedAt.float())
 		}
 	}
 	if math.IsInf(min, 1) {
@@ -163,7 +163,7 @@ func groupEvents(events []Event) []eventGroup {
 }
 
 // buildEventMarkers turns events into markers. Point events (no
-// RecordedAt) on the same column are merged into one marker unless
+// LoggedAt) on the same column are merged into one marker unless
 // StackClashingEvents is set. Backdated events are never merged since
 // they occupy a range, not a point; overlapping backdated ranges are
 // separated by lane packing instead, same as windows.
@@ -207,7 +207,7 @@ func buildEventMarkers(events []Event, sc scale, opts Options) []eventMarker {
 	}
 
 	for _, e := range backdated {
-		effCol, recCol := sc.col(e.Time.float()), sc.col(e.RecordedAt.float())
+		effCol, recCol := sc.col(e.Time.float()), sc.col(e.LoggedAt.float())
 		idLen := utf8.RuneCountInString(e.ID)
 		m := eventMarker{events: []Event{e}, effCol: effCol, recCol: recCol}
 		if effCol <= recCol {

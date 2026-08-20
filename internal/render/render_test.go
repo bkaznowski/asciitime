@@ -273,7 +273,7 @@ func TestBackdatedMarkerAlignsWithRecordedColumn(t *testing.T) {
 			tl := Timeline{
 				Axis:    AxisSymbolic,
 				Windows: []Window{{ID: "W", Start: symPos(0), End: symPos(100)}},
-				Events:  []Event{{ID: "E1", Time: symPos(c.time), Backdated: true, RecordedAt: symPos(c.recorded)}},
+				Events:  []Event{{ID: "E1", Time: symPos(c.time), Backdated: true, LoggedAt: symPos(c.recorded)}},
 			}
 			width := 120
 			sc := newScale(tl, width)
@@ -302,7 +302,7 @@ func TestBackdatedEventSpansBothColumns(t *testing.T) {
 	tl := Timeline{
 		Axis: AxisSymbolic,
 		Events: []Event{
-			{ID: "E1", Time: symPos(1), Backdated: true, RecordedAt: symPos(5)},
+			{ID: "E1", Time: symPos(1), Backdated: true, LoggedAt: symPos(5)},
 		},
 	}
 	sc := newScale(tl, 40)
@@ -317,22 +317,21 @@ func TestBackdatedEventSpansBothColumns(t *testing.T) {
 }
 
 // TestBackdatedEventArrowDirection covers the bug report: when
-// RecordedAt is *before* Time (recorded ahead of when it actually
-// took effect), the arrow must still point from effective to
-// recorded — i.e. leftward here — not just from the earlier column to
-// the later one.
+// LoggedAt is *before* Time (logged ahead of when it actually took
+// effect), the arrow must still point from effective to logged — i.e.
+// leftward here — not just from the earlier column to the later one.
 func TestBackdatedEventArrowDirection(t *testing.T) {
 	tl := Timeline{
 		Axis: AxisSymbolic,
 		Events: []Event{
-			{ID: "E1", Time: symPos(8), Backdated: true, RecordedAt: symPos(2)},
+			{ID: "E1", Time: symPos(8), Backdated: true, LoggedAt: symPos(2)},
 		},
 	}
 	sc := newScale(tl, 40)
 	markers := buildEventMarkers(tl.Events, sc, Options{})
 	m := markers[0]
 	if m.effCol != sc.col(8) || m.recCol != sc.col(2) {
-		t.Fatalf("effCol/recCol should track Time/RecordedAt regardless of order, got eff=%d rec=%d", m.effCol, m.recCol)
+		t.Fatalf("effCol/recCol should track Time/LoggedAt regardless of order, got eff=%d rec=%d", m.effCol, m.recCol)
 	}
 	if m.recCol >= m.effCol {
 		t.Fatalf("expected recCol < effCol for this reversed case, got rec=%d eff=%d", m.recCol, m.effCol)
@@ -340,7 +339,7 @@ func TestBackdatedEventArrowDirection(t *testing.T) {
 
 	out := Render(tl, 40)
 	if !strings.Contains(out, "<") {
-		t.Errorf("expected a left-pointing arrow when recorded_at precedes time, got:\n%s", out)
+		t.Errorf("expected a left-pointing arrow when logged_at precedes time, got:\n%s", out)
 	}
 	if strings.Contains(out, ">") {
 		t.Errorf("did not expect a right-pointing arrow for this reversed case, got:\n%s", out)

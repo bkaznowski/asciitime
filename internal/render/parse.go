@@ -28,11 +28,11 @@ type rawWindow struct {
 }
 
 type rawEvent struct {
-	ID         string      `yaml:"id"`
-	Label      string      `yaml:"label"`
-	Time       interface{} `yaml:"time"`
-	RecordedAt interface{} `yaml:"recorded_at"`
-	Group      string      `yaml:"group"`
+	ID       string      `yaml:"id"`
+	Label    string      `yaml:"label"`
+	Time     interface{} `yaml:"time"`
+	LoggedAt interface{} `yaml:"logged_at"`
+	Group    string      `yaml:"group"`
 }
 
 // LoadFile reads and parses a timeline definition from a YAML file.
@@ -100,13 +100,13 @@ func Load(data []byte) (Timeline, error) {
 			id = fmt.Sprintf("E%d", i+1)
 		}
 		ev := Event{ID: id, Label: e.Label, Time: t, Group: e.Group}
-		if e.RecordedAt != nil {
-			r, err := decodePos(e.RecordedAt, raw.Axis)
+		if e.LoggedAt != nil {
+			r, err := decodePos(e.LoggedAt, raw.Axis)
 			if err != nil {
-				return Timeline{}, fmt.Errorf("event %d (%s): recorded_at: %w", i, name, err)
+				return Timeline{}, fmt.Errorf("event %d (%s): logged_at: %w", i, name, err)
 			}
 			ev.Backdated = true
-			ev.RecordedAt = r
+			ev.LoggedAt = r
 		}
 		tl.Events = append(tl.Events, ev)
 	}

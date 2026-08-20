@@ -59,15 +59,15 @@ type Window struct {
 }
 
 // Event is a labeled point on the axis. A backdated event additionally
-// carries the time it was recorded, which may differ from Time. Group
+// carries the time it was logged, which may differ from Time. Group
 // clusters events that belong together onto their own dedicated block
 // of lanes, never sharing a lane — or a merged clash marker — with a
 // differently-grouped event. The zero value means ungrouped.
 type Event struct {
-	ID         string
-	Label      string
-	Time       pos
-	Backdated  bool
-	RecordedAt pos
-	Group      string
+	ID        string
+	Label     string
+	Time      pos
+	Backdated bool
+	LoggedAt  pos
+	Group     string
 }
