@@ -140,20 +140,30 @@ func windowRow(width int, lane []Window, sc scale) string {
 	return drawRow(width, func(row []rune) {
 		for _, w := range lane {
 			startCol, endCol := sc.col(w.Start.float()), sc.col(w.End.float())
-			for c := startCol; c <= endCol; c++ {
-				switch c {
-				case startCol:
-					row[c] = '['
-				case endCol:
-					row[c] = ']'
-				default:
-					row[c] = '='
+			if w.Start.float() == w.End.float() {
+				// A zero-duration window ([ and ] would otherwise land on
+				// the same column, with the bracket-drawing loop below
+				// silently picking '[' and leaving what looks like an
+				// unclosed bracket) — draw it as a single instant marker
+				// instead.
+				row[startCol] = '|'
+			} else {
+				for c := startCol; c <= endCol; c++ {
+					switch c {
+					case startCol:
+						row[c] = '['
+					case endCol:
+						row[c] = ']'
+					default:
+						row[c] = '='
+					}
 				}
 			}
 			idCol := startCol - len([]rune(w.ID))
 			if idCol < 0 {
-				// No room to the left of the bracket (window starts at
-				// column 0) — drop the ID just inside it instead.
+				// No room to the left (window starts at column 0) — drop
+				// the ID just to the right of the opening bracket/marker
+				// instead.
 				idCol = startCol + 1
 			}
 			placeText(row, idCol, w.ID)

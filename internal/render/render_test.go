@@ -121,6 +121,27 @@ func TestPackWindowLanesSeparatesOverlaps(t *testing.T) {
 	}
 }
 
+func TestZeroDurationWindowRendersAsInstant(t *testing.T) {
+	tl := Timeline{
+		Axis: AxisSymbolic,
+		Windows: []Window{
+			{ID: "A", Start: symPos(3), End: symPos(3)},
+			{ID: "B", Start: symPos(5), End: symPos(9)},
+		},
+	}
+	out := Render(tl, 40)
+
+	if !strings.Contains(out, "|A") {
+		t.Errorf("expected zero-duration window A to render as '|A', got:\n%s", out)
+	}
+	if !strings.Contains(out, "B[") || !strings.Contains(out, "]") {
+		t.Errorf("expected normal-duration window B to still render with brackets, got:\n%s", out)
+	}
+	if strings.Contains(out, "[A") {
+		t.Errorf("zero-duration window A must not render with a bracket, got:\n%s", out)
+	}
+}
+
 func TestWindowLanesFollowDeclarationOrder(t *testing.T) {
 	// Same overlap relationships regardless of declaration order, but
 	// declared as W2, W1, W3. Under the old start-time-sorted packer,
