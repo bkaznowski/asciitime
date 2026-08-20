@@ -65,18 +65,18 @@ func TestLoadAndRenderGrouped(t *testing.T) {
 	if !strings.Contains(out, "account") || !strings.Contains(out, "payment") {
 		t.Errorf("output missing group headers:\n%s", out)
 	}
-	// A marker's ID sits next to its ●, but which side depends on
+	// A marker's ID sits next to its o, but which side depends on
 	// whether there was room on the preferred side (e.g. events at the
-	// very last tick fall back to ID before ●) — check adjacency in
+	// very last tick fall back to ID before o) — check adjacency in
 	// either order rather than assuming one.
 	for _, id := range []string{"E1", "E2", "P1", "P2", "N1"} {
-		if !strings.Contains(out, "●"+id) && !strings.Contains(out, id+"●") {
-			t.Errorf("output missing a marker for %q (expected adjacent to ●):\n%s", id, out)
+		if !strings.Contains(out, "o"+id) && !strings.Contains(out, id+"o") {
+			t.Errorf("output missing a marker for %q (expected adjacent to o):\n%s", id, out)
 		}
 	}
 
 	// E2 (account) and P2 (payment) both land on T5 — same column, but
-	// different groups must never merge into one "●E2,P2" marker.
+	// different groups must never merge into one "oE2,P2" marker.
 	if strings.Contains(out, "E2,P2") || strings.Contains(out, "P2,E2") {
 		t.Errorf("events from different groups must not merge on a shared column:\n%s", out)
 	}
@@ -149,7 +149,7 @@ func TestWindowLanesFollowDeclarationOrder(t *testing.T) {
 
 // TestMergedClashMarkerAnchorNeverMoves covers the bug report: a
 // clash marker's combined ID list (several events merged onto one
-// column) can get long. It must never drag the ● away from the
+// column) can get long. It must never drag the o away from the
 // column it actually marks — the label shifts side or clips instead —
 // and it must never vanish outright when the label can't fit at all.
 func TestMergedClashMarkerAnchorNeverMoves(t *testing.T) {
@@ -173,12 +173,12 @@ func TestMergedClashMarkerAnchorNeverMoves(t *testing.T) {
 	lanes := packEventLanes(markers)
 	row := []rune(eventMarkerRow(width, lanes[0]))
 
-	if wantCol >= len(row) || row[wantCol] != '●' {
+	if wantCol >= len(row) || row[wantCol] != 'o' {
 		got := "?"
 		if wantCol < len(row) {
 			got = string(row[wantCol])
 		}
-		t.Fatalf("expected '●' exactly at column %d regardless of label length (got %q), row=%q", wantCol, got, string(row))
+		t.Fatalf("expected 'o' exactly at column %d regardless of label length (got %q), row=%q", wantCol, got, string(row))
 	}
 }
 
@@ -229,14 +229,14 @@ func TestEventMarkerNearRightEdgeIsNotClipped(t *testing.T) {
 		},
 	}
 	out := Render(tl, 22)
-	if !strings.Contains(out, "●E1") {
-		t.Errorf("expected marker text '●E1' to appear intact near the right edge, got:\n%s", out)
+	if !strings.Contains(out, "oE1") {
+		t.Errorf("expected marker text 'oE1' to appear intact near the right edge, got:\n%s", out)
 	}
 }
 
 // TestBackdatedMarkerAlignsWithRecordedColumn covers the bug report:
-// a backdated event's ● must land on the exact same column a plain
-// event's ● would occupy at that same time, in both arrow directions.
+// a backdated event's o must land on the exact same column a plain
+// event's o would occupy at that same time, in both arrow directions.
 // A window widens the scale so neither column sits at the very edge
 // of the canvas, keeping right-edge clamping out of the picture here.
 func TestBackdatedMarkerAlignsWithRecordedColumn(t *testing.T) {
@@ -262,16 +262,16 @@ func TestBackdatedMarkerAlignsWithRecordedColumn(t *testing.T) {
 			wantCol := sc.col(float64(c.recorded))
 
 			plainRow := []rune(eventMarkerRow(width, []eventMarker{{col: wantCol, events: []Event{{ID: "P"}}}}))
-			if plainRow[wantCol] != '●' {
+			if plainRow[wantCol] != 'o' {
 				t.Fatalf("sanity check failed: plain marker didn't land at col %d", wantCol)
 			}
 
-			if wantCol >= len(row) || row[wantCol] != '●' {
+			if wantCol >= len(row) || row[wantCol] != 'o' {
 				got := "?"
 				if wantCol < len(row) {
 					got = string(row[wantCol])
 				}
-				t.Fatalf("expected '●' exactly at recorded column %d (got %q), row=%q", wantCol, got, string(row))
+				t.Fatalf("expected 'o' exactly at recorded column %d (got %q), row=%q", wantCol, got, string(row))
 			}
 		})
 	}
@@ -318,10 +318,10 @@ func TestBackdatedEventArrowDirection(t *testing.T) {
 	}
 
 	out := Render(tl, 40)
-	if !strings.Contains(out, "◀") {
+	if !strings.Contains(out, "<") {
 		t.Errorf("expected a left-pointing arrow when recorded_at precedes time, got:\n%s", out)
 	}
-	if strings.Contains(out, "▶") {
+	if strings.Contains(out, ">") {
 		t.Errorf("did not expect a right-pointing arrow for this reversed case, got:\n%s", out)
 	}
 }
