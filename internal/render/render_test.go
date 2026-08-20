@@ -12,7 +12,7 @@ func TestLoadAndRenderAbsolute(t *testing.T) {
 	}
 	out := Render(tl, 78)
 
-	for _, want := range []string{"Contracts", "A", "B", "E1", "E2", "Legend", "effective"} {
+	for _, want := range []string{"Contracts", "A", "B", "E1", "E2", "Legend", "occurred"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("output missing %q:\n%s", want, out)
 		}
