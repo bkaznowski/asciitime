@@ -108,7 +108,7 @@ func windowFitsLane(lane []Window, reserveStart, endCol int, sc scale) bool {
 //
 // col is meaningful only for point/merged markers. effCol and recCol
 // are meaningful only when isBackdated() — effCol is always where the
-// x (effective time) is drawn and recCol is always where the >o/<o
+// o (effective time) is drawn and recCol is always where the >*/<*
 // (recorded time) is drawn, regardless of which one comes first on the
 // axis, so the arrow always points from effective to recorded.
 // renderStart/renderEnd are the actual leftmost/rightmost columns this
@@ -181,7 +181,7 @@ func buildEventMarkers(events []Event, sc scale, opts Options) []eventMarker {
 
 	newPointMarker := func(evs []Event, col int) eventMarker {
 		m := eventMarker{events: evs, col: col}
-		w := 1 + utf8.RuneCountInString(m.idList()) // "o" anchor + comma-joined IDs
+		w := 1 + utf8.RuneCountInString(m.idList()) // "*" anchor + comma-joined IDs
 		m.renderStart, m.renderEnd = col, col+w-1
 		return m
 	}
@@ -211,10 +211,10 @@ func buildEventMarkers(events []Event, sc scale, opts Options) []eventMarker {
 		idLen := utf8.RuneCountInString(e.ID)
 		m := eventMarker{events: []Event{e}, effCol: effCol, recCol: recCol}
 		if effCol <= recCol {
-			// x at effCol; "o"+ID spans recCol..recCol+idLen.
+			// o at effCol; "*"+ID spans recCol..recCol+idLen.
 			m.renderStart, m.renderEnd = effCol, recCol+idLen
 		} else {
-			// ID+"o" spans recCol-idLen..recCol; x at effCol.
+			// ID+"*" spans recCol-idLen..recCol; o at effCol.
 			m.renderStart, m.renderEnd = recCol-idLen, effCol
 		}
 		markers = append(markers, m)

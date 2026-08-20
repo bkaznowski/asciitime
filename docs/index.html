@@ -65,6 +65,19 @@
     color: var(--muted);
     margin: 0 0 0.5rem;
   }
+  .panel-header {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.5rem;
+  }
+  .panel-header h2 {
+    margin: 0;
+  }
+  .panel-header button {
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+  }
   pre {
     width: 100%;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -156,7 +169,11 @@
       <div id="editor"></div>
     </div>
     <div class="panel">
-      <h2>Output</h2>
+      <div class="panel-header">
+        <h2>Output</h2>
+        <button id="copy-diagram-btn">Copy diagram</button>
+        <span id="copy-diagram-status" class="status"></span>
+      </div>
       <pre id="output"></pre>
       <div id="error" class="error" hidden></div>
     </div>
@@ -295,6 +312,7 @@ const errorEl = document.getElementById('error');
 const statusEl = document.getElementById('status');
 const widthEl = document.getElementById('width');
 const copyStatusEl = document.getElementById('copy-status');
+const copyDiagramStatusEl = document.getElementById('copy-diagram-status');
 
 // --- Editor: syntax highlighting, autoindent, schema-aware autocomplete ---
 //
@@ -632,6 +650,20 @@ document.getElementById('copy-link-btn').addEventListener('click', async () => {
     copyStatusEl.textContent = 'copy failed — select the address bar instead';
   }
   setTimeout(() => { copyStatusEl.textContent = ''; }, 2500);
+});
+
+document.getElementById('copy-diagram-btn').addEventListener('click', async () => {
+  if (!outputEl.textContent) {
+    copyDiagramStatusEl.textContent = 'nothing to copy';
+  } else {
+    try {
+      await copyToClipboard(outputEl.textContent);
+      copyDiagramStatusEl.textContent = 'diagram copied!';
+    } catch (e) {
+      copyDiagramStatusEl.textContent = 'copy failed — select the output instead';
+    }
+  }
+  setTimeout(() => { copyDiagramStatusEl.textContent = ''; }, 2500);
 });
 
 async function loadWasm() {

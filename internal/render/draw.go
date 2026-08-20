@@ -89,7 +89,7 @@ func placeClamped(row []rune, col int, text string, width, nextFree int) int {
 //
 // Returns the full [start, end] column span actually drawn into (so a
 // caller filling in a connector on one side, e.g. the dashed line to
-// a backdated marker's x, can route around wherever the label really
+// a backdated marker's o, can route around wherever the label really
 // landed rather than assuming its ideal position) and the updated
 // nextFree cursor.
 func placeAnchoredLabel(row []rune, col int, anchor, label string, width, nextFree int, preferRight bool) (occupiedStart, occupiedEnd, newNextFree int) {
@@ -162,7 +162,7 @@ func windowRow(width int, lane []Window, sc scale) string {
 }
 
 // eventMarkerRow draws each marker in a lane. Every anchor glyph — a
-// plain event's o, a backdated event's x and o — is placed at its
+// plain event's *, a backdated event's o and * — is placed at its
 // exact time column unconditionally; only the ID label next to it can
 // shift (to the other side) or clip to stay on-canvas. This matters
 // most for merged clash markers, whose comma-joined ID list can get
@@ -170,15 +170,16 @@ func windowRow(width int, lane []Window, sc scale) string {
 // that by shifting or clipping, never by dragging the point away from
 // the time it actually marks.
 //
-// All glyphs here are plain ASCII on purpose (o/x/</> rather than the
+// All glyphs here are plain ASCII on purpose (*/o/</> rather than the
 // Unicode box-drawing/circle equivalents) — some terminal and browser
 // fonts render "ambiguous-width" Unicode symbols as two columns wide,
 // which silently throws off alignment against the axis above. ASCII
 // has no such ambiguity in any font.
 //
-// A backdated marker's x sits at its effective-time column and its o
-// at its recorded-time column, with an arrowhead in the gap between
-// them (dropped if the gap is too narrow to fit one) pointing from
+// A backdated marker's o (hollow — effective but not yet recorded)
+// sits at its effective-time column and its * (filled — recorded) at
+// its recorded-time column, with an arrowhead in the gap between them
+// (dropped if the gap is too narrow to fit one) pointing from
 // effective to recorded regardless of which falls earlier on the
 // axis, so a "recorded before it happened" case points left instead
 // of silently pointing right like the rest.
@@ -195,7 +196,7 @@ func eventMarkerRow(width int, lane []eventMarker) string {
 					// the connector from where it actually landed, not
 					// that ideal, in case a canvas-edge fallback pushed
 					// it toward the diamond instead.
-					occupiedStart, _, nf := placeAnchoredLabel(row, m.recCol, "o", id, width, nextFree, true)
+					occupiedStart, _, nf := placeAnchoredLabel(row, m.recCol, "*", id, width, nextFree, true)
 					nextFree = nf
 					gapEnd := occupiedStart - 1
 					if gapEnd > m.effCol {
@@ -204,9 +205,9 @@ func eventMarkerRow(width int, lane []eventMarker) string {
 						}
 						placeText(row, gapEnd, ">")
 					}
-					placeText(row, m.effCol, "x")
+					placeText(row, m.effCol, "o")
 				} else {
-					_, occupiedEnd, nf := placeAnchoredLabel(row, m.recCol, "o", id, width, nextFree, false)
+					_, occupiedEnd, nf := placeAnchoredLabel(row, m.recCol, "*", id, width, nextFree, false)
 					nextFree = nf
 					gapStart := occupiedEnd + 1
 					if gapStart < m.effCol {
@@ -215,10 +216,10 @@ func eventMarkerRow(width int, lane []eventMarker) string {
 						}
 						placeText(row, gapStart, "<")
 					}
-					placeText(row, m.effCol, "x")
+					placeText(row, m.effCol, "o")
 				}
 			} else {
-				_, _, nf := placeAnchoredLabel(row, m.col, "o", m.idList(), width, nextFree, true)
+				_, _, nf := placeAnchoredLabel(row, m.col, "*", m.idList(), width, nextFree, true)
 				nextFree = nf
 			}
 		}
