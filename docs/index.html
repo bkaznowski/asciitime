@@ -163,6 +163,13 @@
     <span id="status" class="status">loading…</span>
   </div>
 
+  <div class="controls">
+    <label>shift events/windows after <input type="number" id="shift-after" placeholder="T"></label>
+    <label>by <input type="number" id="shift-by" placeholder="+N"></label>
+    <button id="shift-btn">Apply shift</button>
+    <span id="shift-status" class="status"></span>
+  </div>
+
   <div class="layout">
     <div class="panel">
       <h2>YAML</h2>
@@ -313,6 +320,9 @@ const statusEl = document.getElementById('status');
 const widthEl = document.getElementById('width');
 const copyStatusEl = document.getElementById('copy-status');
 const copyDiagramStatusEl = document.getElementById('copy-diagram-status');
+const shiftAfterEl = document.getElementById('shift-after');
+const shiftByEl = document.getElementById('shift-by');
+const shiftStatusEl = document.getElementById('shift-status');
 
 // --- Editor: syntax highlighting, autoindent, schema-aware autocomplete ---
 //
@@ -514,6 +524,69 @@ document.getElementById('format-btn').addEventListener('click', () => {
     errorEl.textContent = 'Could not format: ' + e.message;
     errorEl.hidden = false;
   }
+});
+
+// --- Shift: insert time into an existing schedule -------------------
+//
+// Shifts every event/window timestamp strictly after a pivot point by
+// a fixed amount, so adding a new event somewhere in the middle of an
+// existing diagram doesn't mean hand-adjusting every entry after it.
+// Symbolic axis only — the absolute (date) axis would need a duration
+// parser (14d, 2w, ...), which isn't worth the complexity for how
+// rarely a date-based diagram needs bulk-rescheduling versus a
+// protocol/sequence-style one.
+//
+// Each timestamp field is compared to the pivot independently, not
+// per-event/per-window as a whole — so a window straddling the pivot
+// gets longer (its end shifts, its start doesn't) rather than moving
+// wholesale. That's the correct behavior for "insert time here": work
+// already in progress at the pivot takes longer, it doesn't teleport.
+function shiftValue(v, pivot, delta) {
+  return typeof v === 'number' && v > pivot ? v + delta : v;
+}
+
+document.getElementById('shift-btn').addEventListener('click', () => {
+  shiftStatusEl.textContent = '';
+  const pivot = Number(shiftAfterEl.value);
+  const delta = Number(shiftByEl.value);
+  if (shiftAfterEl.value.trim() === '' || Number.isNaN(pivot)) {
+    shiftStatusEl.textContent = 'enter a valid "after" value';
+    return;
+  }
+  if (shiftByEl.value.trim() === '' || Number.isNaN(delta) || delta === 0) {
+    shiftStatusEl.textContent = 'enter a non-zero shift amount';
+    return;
+  }
+
+  let parsed;
+  try {
+    parsed = jsyaml.load(getYaml());
+  } catch (e) {
+    errorEl.textContent = 'Could not parse YAML: ' + e.message;
+    errorEl.hidden = false;
+    return;
+  }
+
+  if (!parsed || parsed.axis !== 'symbolic') {
+    shiftStatusEl.textContent = 'shift only works on the symbolic axis';
+    return;
+  }
+
+  for (const w of parsed.windows || []) {
+    w.start = shiftValue(w.start, pivot, delta);
+    w.end = shiftValue(w.end, pivot, delta);
+  }
+  for (const e of parsed.events || []) {
+    e.time = shiftValue(e.time, pivot, delta);
+    if (e.logged_at !== undefined) e.logged_at = shiftValue(e.logged_at, pivot, delta);
+  }
+
+  const formatted = jsyaml.dump(parsed, { indent: 2, lineWidth: -1, noRefs: true });
+  setYaml(formatted);
+  doRender();
+  updateHashFromState();
+  shiftStatusEl.textContent = 'shifted!';
+  setTimeout(() => { shiftStatusEl.textContent = ''; }, 2000);
 });
 
 // --- Sharing state via the URL fragment -----------------------------
