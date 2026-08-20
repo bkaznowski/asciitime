@@ -65,22 +65,11 @@
     color: var(--muted);
     margin: 0 0 0.5rem;
   }
-  textarea, pre {
+  pre {
     width: 100%;
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     font-size: 0.85rem;
     line-height: 1.4;
-  }
-  textarea {
-    height: 420px;
-    resize: vertical;
-    background: var(--bg);
-    color: var(--fg);
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 0.6rem;
-  }
-  pre {
     margin: 0;
     height: 420px;
     overflow: auto;
@@ -89,6 +78,11 @@
     border-radius: 6px;
     padding: 0.6rem;
     white-space: pre;
+  }
+  #editor {
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
   }
   .controls {
     display: flex;
@@ -148,6 +142,7 @@
   <div class="controls">
     <button id="load-absolute">Load absolute example</button>
     <button id="load-symbolic">Load symbolic example</button>
+    <button id="format-btn">Format</button>
     <label>width <input type="number" id="width" placeholder="auto"></label>
     <button id="render-btn" class="primary">Render</button>
     <button id="copy-link-btn">Copy link</button>
@@ -158,7 +153,7 @@
   <div class="layout">
     <div class="panel">
       <h2>YAML</h2>
-      <textarea id="yaml" spellcheck="false"></textarea>
+      <div id="editor"></div>
     </div>
     <div class="panel">
       <h2>Output</h2>
@@ -168,7 +163,82 @@
   </div>
 
 <script src="wasm_exec.js"></script>
-<script>
+<script type="module">
+// The unscoped "codemirror" package resolves to the legacy CodeMirror
+// 5 API, not the CM6 bundle its version number suggests — so basicSetup
+// is assembled by hand here from the actual CM6 scoped packages
+// instead, matching the composition of the real basicSetup helper.
+import {
+  EditorView, keymap, lineNumbers, highlightActiveLineGutter, highlightSpecialChars,
+  drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine,
+} from "https://esm.sh/@codemirror/view@6";
+import { EditorState, Compartment, Prec } from "https://esm.sh/@codemirror/state@6";
+import {
+  HighlightStyle, syntaxHighlighting, indentOnInput, bracketMatching, foldGutter, foldKeymap,
+} from "https://esm.sh/@codemirror/language@6";
+import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6";
+import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap, completionStatus } from "https://esm.sh/@codemirror/autocomplete@6";
+import { yaml as yamlLang } from "https://esm.sh/@codemirror/lang-yaml@6";
+import { tags as t } from "https://esm.sh/@lezer/highlight@1";
+import * as jsyaml from "https://esm.sh/js-yaml@4";
+
+// defaultHighlightStyle assumes a light background and colors YAML
+// keys a dark blue that's hard to read on the dark theme — so instead
+// of that, two explicit HighlightStyles (light/dark) are defined here
+// and swapped by the same media-query listener that swaps the editor
+// theme below. propertyName/attributeName/definition are all covered
+// for the key color since which exact tag a grammar emits for mapping
+// keys varies.
+const highlightCompartment = new Compartment();
+
+function highlightStyle(dark) {
+  if (dark) {
+    return HighlightStyle.define([
+      { tag: [t.propertyName, t.attributeName, t.definition(t.propertyName)], color: '#7ee8fa' },
+      { tag: [t.string, t.special(t.string)], color: '#ffab70' },
+      { tag: [t.number, t.bool, t.atom, t.null], color: '#f0883e' },
+      { tag: t.comment, color: '#8b949e', fontStyle: 'italic' },
+      { tag: [t.punctuation, t.meta, t.separator], color: '#c9d1d9' },
+      { tag: t.invalid, color: '#ff6b6b' },
+    ]);
+  }
+  return HighlightStyle.define([
+    { tag: [t.propertyName, t.attributeName, t.definition(t.propertyName)], color: '#0550ae' },
+    { tag: [t.string, t.special(t.string)], color: '#a11' },
+    { tag: [t.number, t.bool, t.atom, t.null], color: '#905' },
+    { tag: t.comment, color: '#6a737d', fontStyle: 'italic' },
+    { tag: [t.punctuation, t.meta, t.separator], color: '#444' },
+    { tag: t.invalid, color: '#b91c1c' },
+  ]);
+}
+
+const basicSetup = [
+  lineNumbers(),
+  highlightActiveLineGutter(),
+  highlightSpecialChars(),
+  cmHistory(),
+  foldGutter(),
+  drawSelection(),
+  dropCursor(),
+  EditorState.allowMultipleSelections.of(true),
+  indentOnInput(),
+  highlightCompartment.of(syntaxHighlighting(highlightStyle(matchMedia('(prefers-color-scheme: dark)').matches), { fallback: true })),
+  bracketMatching(),
+  closeBrackets(),
+  autocompletion(),
+  rectangularSelection(),
+  crosshairCursor(),
+  highlightActiveLine(),
+  keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...foldKeymap,
+    ...completionKeymap,
+    indentWithTab,
+  ]),
+];
+
 const ABSOLUTE_EXAMPLE = `title: Contracts
 axis: absolute
 
@@ -220,18 +290,191 @@ events:
     time: 2
 `;
 
-const yamlEl = document.getElementById('yaml');
 const outputEl = document.getElementById('output');
 const errorEl = document.getElementById('error');
 const statusEl = document.getElementById('status');
 const widthEl = document.getElementById('width');
 const copyStatusEl = document.getElementById('copy-status');
 
+// --- Editor: syntax highlighting, autoindent, schema-aware autocomplete ---
+//
+// basicSetup (from the "codemirror" convenience bundle) already wires
+// up line numbers, bracket matching, history/undo, an autocomplete UI,
+// and Enter-key indentation via the default keymap. On top of that we
+// add: YAML syntax highlighting (@codemirror/lang-yaml), a completion
+// source tailored to this tool's specific schema (top-level keys,
+// window/event item fields, and enum-like values for axis/
+// stack_clashing_events), a custom Enter handler that increases indent
+// after a line ending in ':' — which the generic YAML grammar doesn't
+// know is meaningful the way e.g. a curly brace would be — and a
+// light/dark theme that tracks the OS preference the same way the
+// rest of the page's CSS does.
+
+const SECTION_ITEM_FIELDS = {
+  windows: [
+    { label: 'id', detail: 'window id (optional — auto A, B, C…)' },
+    { label: 'label', detail: 'shown in the legend' },
+    { label: 'start', detail: 'axis position' },
+    { label: 'end', detail: 'axis position' },
+  ],
+  events: [
+    { label: 'id', detail: 'event id (optional — auto E1, E2…)' },
+    { label: 'label', detail: 'shown in the legend' },
+    { label: 'time', detail: 'effective axis position' },
+    { label: 'recorded_at', detail: 'optional — marks the event backdated' },
+    { label: 'group', detail: 'optional — clusters events into their own block' },
+  ],
+};
+
+const TOP_LEVEL_FIELDS = [
+  { label: 'title', detail: 'diagram title' },
+  { label: 'axis', detail: '"absolute" or "symbolic"' },
+  { label: 'options', detail: 'rendering options' },
+  { label: 'windows', detail: 'list of time spans' },
+  { label: 'events', detail: 'list of points in time' },
+];
+
+const OPTIONS_FIELDS = [
+  { label: 'stack_clashing_events', detail: 'default false — merges same-column events' },
+];
+
+function leadingWhitespace(text) {
+  return (text.match(/^[ \t]*/) || [''])[0];
+}
+
+// Walks upward from the current line to find which section (windows /
+// events / options) this position is nested under, by tracking the
+// nearest shallower-indented line at each step. Good enough for this
+// tool's flat two-level schema without needing a real YAML parse.
+function detectSection(state, pos) {
+  const line = state.doc.lineAt(pos);
+  let indent = leadingWhitespace(line.text).length;
+  for (let n = line.number - 1; n >= 1; n--) {
+    const l = state.doc.line(n);
+    const text = l.text;
+    if (!text.trim()) continue;
+    const lIndent = leadingWhitespace(text).length;
+    if (lIndent < indent) {
+      const key = text.trim().replace(/^-\s*/, '').replace(/:.*$/, '');
+      if (key === 'windows' || key === 'events' || key === 'options') return key;
+      indent = lIndent;
+      if (lIndent === 0) continue;
+    }
+  }
+  return 'top';
+}
+
+function yamlCompletions(context) {
+  const line = context.state.doc.lineAt(context.pos);
+  const beforeCursor = line.text.slice(0, context.pos - line.from);
+
+  // Value position: "axis: |" or "stack_clashing_events: |"
+  let m = beforeCursor.match(/^\s*axis:\s*(\w*)$/);
+  if (m) {
+    return {
+      from: context.pos - m[1].length,
+      options: ['absolute', 'symbolic'].map(label => ({ label, type: 'constant' })),
+    };
+  }
+  m = beforeCursor.match(/^\s*stack_clashing_events:\s*(\w*)$/);
+  if (m) {
+    return {
+      from: context.pos - m[1].length,
+      options: ['true', 'false'].map(label => ({ label, type: 'constant' })),
+    };
+  }
+
+  // Key position: start of a line (optionally after "- ", optionally
+  // already partway through typing a key).
+  const word = context.matchBefore(/[\w-]*/);
+  if (!word) return null;
+  if (word.from === word.to && !context.explicit) return null;
+
+  const linePrefix = beforeCursor.slice(0, beforeCursor.length - (word.to - word.from));
+  if (!/^[ \t]*(-\s*)?$/.test(linePrefix)) return null; // not at a key position
+
+  const section = detectSection(context.state, line.from);
+  const fields = SECTION_ITEM_FIELDS[section] || (section === 'options' ? OPTIONS_FIELDS : TOP_LEVEL_FIELDS);
+  return {
+    from: word.from,
+    options: fields.map(f => ({ label: f.label, detail: f.detail, type: 'property', apply: f.label + ': ' })),
+  };
+}
+
+// Enter continues the current line's indentation and adds one level
+// after a line ending in ':' (opening a mapping or, for "- key:",
+// staying at the list item's own indent plus two).
+function yamlSmartNewline(view) {
+  // Defer to the completion popup's own Enter-accepts binding when one
+  // is open — otherwise this handler's Prec.highest wins the race and
+  // inserts a raw newline instead of accepting the selected suggestion.
+  if (completionStatus(view.state)) return false;
+  const { state } = view;
+  const sel = state.selection.main;
+  if (!sel.empty) return false;
+  const line = state.doc.lineAt(sel.from);
+  const ws = leadingWhitespace(line.text);
+  const trimmed = line.text.trim();
+  let indent = ws;
+  if (trimmed.endsWith(':')) indent += '  ';
+  view.dispatch(state.update(state.replaceSelection('\n' + indent), { scrollIntoView: true, userEvent: 'input' }));
+  return true;
+}
+
+const themeCompartment = new Compartment();
+
+function editorTheme(dark) {
+  const vars = dark
+    ? { bg: '#14161a', fg: '#e6e6e6', gutterFg: '#5c636e', selection: '#2a3f66', activeLine: '#1c1f24' }
+    : { bg: '#ffffff', fg: '#1a1a1a', gutterFg: '#8a8f98', selection: '#cfe0ff', activeLine: '#f7f7f7' };
+  return EditorView.theme({
+    '&': { backgroundColor: vars.bg, color: vars.fg, height: '420px' },
+    '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.85rem' },
+    '.cm-gutters': { backgroundColor: vars.bg, color: vars.gutterFg, border: 'none' },
+    '.cm-activeLine': { backgroundColor: vars.activeLine },
+    '.cm-activeLineGutter': { backgroundColor: vars.activeLine },
+    '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: vars.selection + ' !important' },
+    '.cm-scroller': { overflow: 'auto' },
+  }, { dark });
+}
+
+const editorContainer = document.getElementById('editor');
+const editorView = new EditorView({
+  state: EditorState.create({
+    doc: '',
+    extensions: [
+      basicSetup,
+      yamlLang(),
+      Prec.highest(keymap.of([{ key: 'Enter', run: yamlSmartNewline }])),
+      EditorView.updateListener.of(update => { if (update.docChanged) onEdit(); }),
+      themeCompartment.of(editorTheme(matchMedia('(prefers-color-scheme: dark)').matches)),
+      yamlLang().language.data.of({ autocomplete: yamlCompletions }),
+    ],
+  }),
+  parent: editorContainer,
+});
+
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  editorView.dispatch({
+    effects: [
+      themeCompartment.reconfigure(editorTheme(e.matches)),
+      highlightCompartment.reconfigure(syntaxHighlighting(highlightStyle(e.matches), { fallback: true })),
+    ],
+  });
+});
+
+function getYaml() {
+  return editorView.state.doc.toString();
+}
+function setYaml(text) {
+  editorView.dispatch({ changes: { from: 0, to: editorView.state.doc.length, insert: text } });
+}
+
 function doRender() {
   if (typeof window.asciitimeRender !== 'function') return;
   const widthVal = widthEl.value.trim();
   const width = widthVal ? parseInt(widthVal, 10) : 0;
-  const res = window.asciitimeRender(yamlEl.value, width);
+  const res = window.asciitimeRender(getYaml(), width);
   if (res.error) {
     errorEl.textContent = res.error;
     errorEl.hidden = false;
@@ -241,6 +484,19 @@ function doRender() {
     outputEl.textContent = res.output;
   }
 }
+
+document.getElementById('format-btn').addEventListener('click', () => {
+  try {
+    const parsed = jsyaml.load(getYaml());
+    const formatted = jsyaml.dump(parsed, { indent: 2, lineWidth: -1, noRefs: true });
+    setYaml(formatted);
+    doRender();
+    updateHashFromState();
+  } catch (e) {
+    errorEl.textContent = 'Could not format: ' + e.message;
+    errorEl.hidden = false;
+  }
+});
 
 // --- Sharing state via the URL fragment -----------------------------
 //
@@ -306,7 +562,7 @@ async function stateFromHash() {
 
 async function updateHashFromState() {
   const params = new URLSearchParams();
-  params.set('y', await encodeYAML(yamlEl.value));
+  params.set('y', await encodeYAML(getYaml()));
   const widthVal = widthEl.value.trim();
   if (widthVal) params.set('w', widthVal);
   history.replaceState(null, '', '#' + params.toString());
@@ -326,16 +582,15 @@ function onEdit() {
   scheduleShareUpdate();
 }
 
-yamlEl.addEventListener('input', onEdit);
 widthEl.addEventListener('input', onEdit);
 document.getElementById('render-btn').addEventListener('click', doRender);
 document.getElementById('load-absolute').addEventListener('click', () => {
-  yamlEl.value = ABSOLUTE_EXAMPLE;
+  setYaml(ABSOLUTE_EXAMPLE);
   doRender();
   updateHashFromState();
 });
 document.getElementById('load-symbolic').addEventListener('click', () => {
-  yamlEl.value = SYMBOLIC_EXAMPLE;
+  setYaml(SYMBOLIC_EXAMPLE);
   doRender();
   updateHashFromState();
 });
@@ -397,10 +652,10 @@ async function loadWasm() {
 
   const shared = await stateFromHash();
   if (shared) {
-    yamlEl.value = shared.yaml;
+    setYaml(shared.yaml);
     if (shared.width) widthEl.value = String(shared.width);
   } else {
-    yamlEl.value = ABSOLUTE_EXAMPLE;
+    setYaml(ABSOLUTE_EXAMPLE);
   }
   doRender();
 }
