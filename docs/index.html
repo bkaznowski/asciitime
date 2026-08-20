@@ -150,6 +150,8 @@
     <button id="load-symbolic">Load symbolic example</button>
     <label>width <input type="number" id="width" placeholder="auto"></label>
     <button id="render-btn" class="primary">Render</button>
+    <button id="copy-link-btn">Copy link</button>
+    <span id="copy-status" class="status"></span>
     <span id="status" class="status">loading…</span>
   </div>
 
@@ -223,6 +225,7 @@ const outputEl = document.getElementById('output');
 const errorEl = document.getElementById('error');
 const statusEl = document.getElementById('status');
 const widthEl = document.getElementById('width');
+const copyStatusEl = document.getElementById('copy-status');
 
 function doRender() {
   if (typeof window.asciitimeRender !== 'function') return;
@@ -239,23 +242,141 @@ function doRender() {
   }
 }
 
-let debounceTimer;
-yamlEl.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(doRender, 250);
-});
-widthEl.addEventListener('input', () => {
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(doRender, 250);
-});
+// --- Sharing state via the URL fragment -----------------------------
+//
+// The YAML (and width, if set) round-trips through the URL fragment
+// so a page reload or a pasted link reproduces the exact diagram. The
+// fragment is gzip-compressed when the browser supports
+// CompressionStream (most do) to keep links reasonably short, with a
+// one-byte prefix ("z" compressed, "p" plain) so old links written by
+// a browser without CompressionStream still decode correctly anywhere.
+// The fragment is never sent to any server — GitHub Pages doesn't even
+// see it — so this works entirely client-side.
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(str) {
+  str = str.replace(/-/g, '+').replace(/_/g, '/');
+  while (str.length % 4) str += '=';
+  const binary = atob(str);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+async function encodeYAML(text) {
+  if (typeof CompressionStream === 'function') {
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return 'z' + bytesToBase64Url(new Uint8Array(buf));
+  }
+  return 'p' + bytesToBase64Url(new TextEncoder().encode(text));
+}
+
+async function decodeYAML(encoded) {
+  const kind = encoded[0];
+  const bytes = base64UrlToBytes(encoded.slice(1));
+  if (kind === 'z') {
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new TextDecoder().decode(buf);
+  }
+  return new TextDecoder().decode(bytes);
+}
+
+async function stateFromHash() {
+  const raw = location.hash.replace(/^#/, '');
+  if (!raw) return null;
+  const params = new URLSearchParams(raw);
+  const y = params.get('y');
+  if (!y) return null;
+  try {
+    const yaml = await decodeYAML(y);
+    const w = params.get('w');
+    return { yaml, width: w ? parseInt(w, 10) : null };
+  } catch (e) {
+    console.warn('asciitime: could not decode shared link, ignoring', e);
+    return null;
+  }
+}
+
+async function updateHashFromState() {
+  const params = new URLSearchParams();
+  params.set('y', await encodeYAML(yamlEl.value));
+  const widthVal = widthEl.value.trim();
+  if (widthVal) params.set('w', widthVal);
+  history.replaceState(null, '', '#' + params.toString());
+}
+
+let renderTimer, shareTimer;
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(doRender, 250);
+}
+function scheduleShareUpdate() {
+  clearTimeout(shareTimer);
+  shareTimer = setTimeout(updateHashFromState, 400);
+}
+function onEdit() {
+  scheduleRender();
+  scheduleShareUpdate();
+}
+
+yamlEl.addEventListener('input', onEdit);
+widthEl.addEventListener('input', onEdit);
 document.getElementById('render-btn').addEventListener('click', doRender);
 document.getElementById('load-absolute').addEventListener('click', () => {
   yamlEl.value = ABSOLUTE_EXAMPLE;
   doRender();
+  updateHashFromState();
 });
 document.getElementById('load-symbolic').addEventListener('click', () => {
   yamlEl.value = SYMBOLIC_EXAMPLE;
   doRender();
+  updateHashFromState();
+});
+
+function legacyCopy(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.position = 'fixed';
+  ta.style.opacity = '0';
+  document.body.appendChild(ta);
+  ta.select();
+  const ok = document.execCommand('copy');
+  document.body.removeChild(ta);
+  if (!ok) throw new Error('execCommand copy was rejected');
+}
+
+async function copyToClipboard(text) {
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (e) {
+      // Some environments (embedded frames, certain permission
+      // policies) reject the Clipboard API even in a secure context —
+      // fall back to the legacy method instead of surfacing an error.
+      legacyCopy(text);
+      return;
+    }
+  }
+  legacyCopy(text);
+}
+
+document.getElementById('copy-link-btn').addEventListener('click', async () => {
+  try {
+    await updateHashFromState();
+    await copyToClipboard(location.href);
+    copyStatusEl.textContent = 'link copied!';
+  } catch (e) {
+    copyStatusEl.textContent = 'copy failed — select the address bar instead';
+  }
+  setTimeout(() => { copyStatusEl.textContent = ''; }, 2500);
 });
 
 async function loadWasm() {
@@ -273,7 +394,14 @@ async function loadWasm() {
   }
   go.run(result.instance);
   statusEl.textContent = 'ready';
-  yamlEl.value = ABSOLUTE_EXAMPLE;
+
+  const shared = await stateFromHash();
+  if (shared) {
+    yamlEl.value = shared.yaml;
+    if (shared.width) widthEl.value = String(shared.width);
+  } else {
+    yamlEl.value = ABSOLUTE_EXAMPLE;
+  }
   doRender();
 }
 
