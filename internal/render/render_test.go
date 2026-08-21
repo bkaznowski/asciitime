@@ -5,6 +5,76 @@ import (
 	"testing"
 )
 
+func TestLoadAllParsesMultipleDocuments(t *testing.T) {
+	data := []byte(`title: First
+axis: symbolic
+events:
+  - id: E1
+    time: 1
+---
+title: Second
+axis: symbolic
+events:
+  - id: E1
+    time: 2
+`)
+	timelines, err := LoadAll(data)
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	if len(timelines) != 2 {
+		t.Fatalf("got %d timelines, want 2", len(timelines))
+	}
+	if timelines[0].Title != "First" || timelines[1].Title != "Second" {
+		t.Fatalf("got titles %q, %q; want First, Second", timelines[0].Title, timelines[1].Title)
+	}
+}
+
+func TestLoadAllSingleDocumentMatchesLoad(t *testing.T) {
+	data := []byte(`title: Solo
+axis: symbolic
+events:
+  - id: E1
+    time: 1
+`)
+	single, err := Load(data)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	all, err := LoadAll(data)
+	if err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	if len(all) != 1 || all[0].Title != single.Title {
+		t.Fatalf("LoadAll on single-document input = %+v, want one-element slice matching Load = %+v", all, single)
+	}
+}
+
+func TestLoadAllReportsWhichDocumentFailed(t *testing.T) {
+	data := []byte(`title: First
+axis: symbolic
+events:
+  - id: E1
+    time: 1
+---
+title: Second
+axis: bogus
+events:
+  - id: E1
+    time: 1
+`)
+	_, err := LoadAll(data)
+	if err == nil || !strings.Contains(err.Error(), "document 2") {
+		t.Fatalf("expected error mentioning \"document 2\", got: %v", err)
+	}
+}
+
+func TestLoadAllEmptyInputErrors(t *testing.T) {
+	if _, err := LoadAll([]byte("")); err == nil {
+		t.Fatal("expected an error for empty input, got nil")
+	}
+}
+
 func TestLoadAndRenderAbsolute(t *testing.T) {
 	tl, err := LoadFile("../../testdata/contracts.yaml")
 	if err != nil {

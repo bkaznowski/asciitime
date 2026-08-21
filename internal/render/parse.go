@@ -1,7 +1,9 @@
 package render
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -36,6 +38,8 @@ type rawEvent struct {
 }
 
 // LoadFile reads and parses a timeline definition from a YAML file.
+// Only the first "---"-separated document is used; see LoadAllFile to
+// render every document in a multi-document file.
 func LoadFile(path string) (Timeline, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -48,13 +52,60 @@ func LoadFile(path string) (Timeline, error) {
 	return tl, nil
 }
 
-// Load parses a timeline definition from YAML bytes.
+// Load parses a timeline definition from YAML bytes. Only the first
+// "---"-separated document is used; see LoadAll to render every
+// document in multi-document input.
 func Load(data []byte) (Timeline, error) {
 	var raw rawFile
 	if err := yaml.Unmarshal(data, &raw); err != nil {
 		return Timeline{}, fmt.Errorf("parse yaml: %w", err)
 	}
+	return buildTimeline(raw)
+}
 
+// LoadAllFile reads and parses every "---"-separated YAML document in
+// a file, each an independent timeline definition.
+func LoadAllFile(path string) ([]Timeline, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	tls, err := LoadAll(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	return tls, nil
+}
+
+// LoadAll parses every "---"-separated YAML document in data, each an
+// independent timeline definition. A single-document input behaves
+// exactly like Load, just wrapped in a one-element slice.
+func LoadAll(data []byte) ([]Timeline, error) {
+	dec := yaml.NewDecoder(bytes.NewReader(data))
+	var timelines []Timeline
+	for i := 1; ; i++ {
+		var raw rawFile
+		if err := dec.Decode(&raw); err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, fmt.Errorf("document %d: parse yaml: %w", i, err)
+		}
+		tl, err := buildTimeline(raw)
+		if err != nil {
+			return nil, fmt.Errorf("document %d: %w", i, err)
+		}
+		timelines = append(timelines, tl)
+	}
+	if len(timelines) == 0 {
+		return nil, fmt.Errorf("no YAML documents found")
+	}
+	return timelines, nil
+}
+
+// buildTimeline validates a parsed document and assembles the
+// Timeline it describes.
+func buildTimeline(raw rawFile) (Timeline, error) {
 	switch raw.Axis {
 	case AxisAbsolute, AxisSymbolic:
 	case "":

@@ -1,11 +1,14 @@
 //go:build js && wasm
 
-// Command wasm exposes render.Load and render.Render to JavaScript as
-// a single global function, window.asciitimeRender(yamlText, width),
-// for the static GitHub Pages front end in docs/.
+// Command wasm exposes render.LoadAll and render.Render to JavaScript
+// as a single global function, window.asciitimeRender(yamlText, width),
+// for the static GitHub Pages front end in docs/. Multiple
+// "---"-separated YAML documents render as multiple diagrams, joined
+// the same way the CLI joins them.
 package main
 
 import (
+	"strings"
 	"syscall/js"
 
 	"github.com/bkaznowski/asciitime/internal/render"
@@ -22,11 +25,16 @@ func renderYAML(this js.Value, args []js.Value) interface{} {
 		width = args[1].Int()
 	}
 
-	tl, err := render.Load([]byte(yamlText))
+	timelines, err := render.LoadAll([]byte(yamlText))
 	if err != nil {
 		return jsResult("", err.Error())
 	}
-	return jsResult(render.Render(tl, width), "")
+
+	diagrams := make([]string, len(timelines))
+	for i, tl := range timelines {
+		diagrams[i] = render.Render(tl, width)
+	}
+	return jsResult(strings.Join(diagrams, "\n\n---\n\n"), "")
 }
 
 func jsResult(output, errMsg string) map[string]interface{} {

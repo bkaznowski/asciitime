@@ -1,11 +1,13 @@
 // Command asciitime renders a YAML timeline definition as an ASCII
-// diagram.
+// diagram. A file containing multiple "---"-separated YAML documents
+// renders each as its own diagram.
 package main
 
 import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/bkaznowski/asciitime/internal/render"
 )
@@ -23,11 +25,16 @@ func main() {
 		os.Exit(2)
 	}
 
-	tl, err := render.LoadFile(flag.Arg(0))
+	timelines, err := render.LoadAllFile(flag.Arg(0))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "asciitime:", err)
 		os.Exit(1)
 	}
 
-	fmt.Println(render.Render(tl, *width))
+	diagrams := make([]string, len(timelines))
+	for i, tl := range timelines {
+		diagrams[i] = render.Render(tl, *width)
+	}
+
+	fmt.Println(strings.Join(diagrams, "\n\n---\n\n"))
 }
