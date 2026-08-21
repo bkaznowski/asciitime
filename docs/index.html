@@ -452,15 +452,27 @@ function yamlSmartNewline(view) {
 const themeCompartment = new Compartment();
 
 function editorTheme(dark) {
+  // .cm-activeLine's background must stay translucent, not opaque.
+  // CM6 draws the selection highlight as an absolutely-positioned
+  // layer with a *negative* z-index (behind normal content), which
+  // ordinary lines don't notice because their background is
+  // transparent — the highlight shows straight through underneath the
+  // text. The active line is different: it's still a normal (non-
+  // positioned) element, and normal-flow content always paints above
+  // negative-z-index siblings regardless of DOM order — so an opaque
+  // background here fully occludes the selection layer on exactly
+  // that one line, which is why a selection could disappear the
+  // instant it touched the cursor's line. A translucent overlay lets
+  // the selection color underneath still blend through.
   const vars = dark
-    ? { bg: '#14161a', fg: '#e6e6e6', gutterFg: '#5c636e', selection: '#2a3f66', activeLine: '#1c1f24' }
-    : { bg: '#ffffff', fg: '#1a1a1a', gutterFg: '#8a8f98', selection: '#cfe0ff', activeLine: '#f7f7f7' };
+    ? { bg: '#14161a', fg: '#e6e6e6', gutterFg: '#5c636e', selection: '#2a3f66', activeLine: 'rgba(255, 255, 255, 0.06)', activeLineGutter: '#1c1f24' }
+    : { bg: '#ffffff', fg: '#1a1a1a', gutterFg: '#8a8f98', selection: '#cfe0ff', activeLine: 'rgba(0, 0, 0, 0.035)', activeLineGutter: '#f0f0f0' };
   return EditorView.theme({
     '&': { backgroundColor: vars.bg, color: vars.fg, height: '420px' },
     '.cm-content': { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace', fontSize: '0.85rem' },
     '.cm-gutters': { backgroundColor: vars.bg, color: vars.gutterFg, border: 'none' },
     '.cm-activeLine': { backgroundColor: vars.activeLine },
-    '.cm-activeLineGutter': { backgroundColor: vars.activeLine },
+    '.cm-activeLineGutter': { backgroundColor: vars.activeLineGutter },
     '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: vars.selection + ' !important' },
     '.cm-scroller': { overflow: 'auto' },
   }, { dark });
